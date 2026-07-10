@@ -1,9 +1,14 @@
 package main
 
 import (
+	"log"
+
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/app"
 )
 
 func main() {
-	app.Run()
+	err := app.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
