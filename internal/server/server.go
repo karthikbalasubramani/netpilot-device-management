@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
 )
 
 // Struct Server consists of Config and Router
@@ -39,10 +40,22 @@ func (s *Server) registerRoutes() {
 
 // healthCheck returns the current application health status.
 func (s *Server) healthCheck(ctx *gin.Context) {
+
+	systemState, err := health.GetSystemInfoHealth()
+	if err != nil {
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":      "degraded",
+			"service":     s.config.AppName,
+			"environment": s.config.AppEnv,
+			"error":       err.Error(),
+		})
+		return
+	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"status":        "ok",
 		"service":       s.config.AppName,
 		"environment":   s.config.AppEnv,
 		"server_status": "Running",
+		"system_state":  systemState,
 	})
 }
