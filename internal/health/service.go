@@ -21,6 +21,7 @@ type SystemState struct {
 	UptimeSeconds      uint64  `json:"uptime_seconds"`
 }
 
+// GetSystemInfoHealth will return SystemState with values
 func GetSystemInfoHealth() (*SystemState, error) {
 	// CPU Percentage
 	cpuPercentages, err := cpu.Percent(500*time.Millisecond, false)
@@ -50,6 +51,8 @@ func GetSystemInfoHealth() (*SystemState, error) {
 	if cpuUsage >= 60 {
 		return nil, fmt.Errorf("CPU Usage Percentage is greater than 60%%")
 	}
+
+	// Return final stats after checking
 	return &SystemState{
 		CPUUsagePercent:    round(cpuUsage),
 		MemoryUsagePercent: round(memoryStats.UsedPercent),
