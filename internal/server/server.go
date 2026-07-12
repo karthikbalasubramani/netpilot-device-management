@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -9,10 +10,11 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
 )
 
-// Server holds the HTTP router and application configuration.
+// Server holds the HTTP router, HTTP server instance, and application configuration.
 type Server struct {
-	config *config.Config
-	router *gin.Engine
+	config     *config.Config
+	router     *gin.Engine
+	httpServer *http.Server
 }
 
 // NewHTTPServer creates a new HTTP server instance, configures middleware,
@@ -32,7 +34,7 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	// Disable trusting all proxies by default.
 	if err := router.SetTrustedProxies(nil); err != nil {
-		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
+		panic(fmt.Errorf("Failed to set trusted proxies: %w", err))
 	}
 
 	server := &Server{
@@ -42,13 +44,26 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	server.registerRoutes()
 
+	server.httpServer = &http.Server{
+		Addr:    fmt.Sprintf(":%s", cfg.AppPort),
+		Handler: router,
+	}
+
 	return server
 }
 
 // StartHTTPServer starts the HTTP server on the configured application port.
 func (s *Server) StartHTTPServer() error {
-	address := fmt.Sprintf(":%s", s.config.AppPort)
-	return s.router.Run(address)
+	return s.httpServer.ListenAndServe()
+}
+
+// ShutdownHTTPServer gracefully shuts down the HTTP server.
+func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
+	}
+
+	return nil
 }
 
 // registerRoutes registers all HTTP routes for the application.
