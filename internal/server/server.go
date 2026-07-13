@@ -35,6 +35,7 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	// Disable trusting all proxies by default.
 	if err := router.SetTrustedProxies(nil); err != nil {
+		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
 		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
 	}
 
@@ -66,6 +67,7 @@ func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
 	}
 
 	if err := s.httpServer.Shutdown(ctx); err != nil {
+		logger.Error(fmt.Sprintf("Failed to shutdown HTTP server: %v", err))
 		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
 	}
 
@@ -75,6 +77,7 @@ func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
 // registerRoutes registers all HTTP routes for the application.
 func (s *Server) registerRoutes() {
 	s.router.GET("/health", s.healthCheck)
+	logger.Debug("All the health routes are registered")
 }
 
 // healthCheck returns the current application and system health status.
@@ -82,7 +85,7 @@ func (s *Server) healthCheck(ctx *gin.Context) {
 	// Collect current system state such as CPU, memory, disk, and uptime.
 	systemState, err := health.GetSystemInfoHealth(s.config.CPUThresholdPercent, s.config.DiskPath)
 	if err != nil {
-		logger.Warn("health check degraded", "error", err)
+		logger.Warn("Health check degraded", "error", err)
 
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":      "degraded",

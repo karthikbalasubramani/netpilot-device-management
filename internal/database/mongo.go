@@ -24,7 +24,7 @@ func ConnectMongoDB(cfg *config.Config) (*MongoDB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	logger.Info("connecting to MongoDB", "database", cfg.MongoDatabase)
+	logger.Info("Connecting to MongoDB", "database", cfg.MongoDatabase)
 
 	// Prepare MongoDB client options using the configured connection URI.
 	clientOptions := options.Client().ApplyURI(cfg.MongoURI)
@@ -60,7 +60,7 @@ func Disconnect(m *MongoDB) error {
 
 	// Disconnect MongoDB client.
 	if err := m.Client.Disconnect(ctx); err != nil {
-		return fmt.Errorf("failed to disconnect MongoDB: %w", err)
+		return fmt.Errorf("Failed to disconnect MongoDB: %w", err)
 	}
 
 	return nil

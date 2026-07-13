@@ -20,9 +20,10 @@ import (
 func Run() error {
 	// Load application configuration from environment variables.
 	cfg := config.Load()
-
 	// Initialize global structured logger.
 	logger.Init(cfg.LogLevel)
+
+	logger.Debug("Configs are loaded from environment variables successfully")
 
 	logger.Info("starting NetPilot API",
 		"application_name", cfg.AppName,
@@ -33,14 +34,14 @@ func Run() error {
 	// Establish MongoDB connection during application startup.
 	mongoDB, err := database.ConnectMongoDB(cfg)
 	if err != nil {
-		logger.Error("failed to connect MongoDB", "error", err)
-		return fmt.Errorf("failed to connect MongoDB: %w", err)
+		logger.Error("Failed to connect MongoDB", "error", err)
+		return fmt.Errorf("Failed to connect MongoDB: %w", err)
 	}
 
 	// Register MongoDB disconnect logic to run before application shutdown.
 	defer func() {
 		if err := database.Disconnect(mongoDB); err != nil {
-			logger.Error("failed to disconnect MongoDB", "error", err)
+			logger.Error("Failed to disconnect MongoDB", "error", err)
 		} else {
 			logger.Info("MongoDB disconnected successfully")
 		}
@@ -71,16 +72,16 @@ func Run() error {
 	select {
 	case err := <-serverErrorChan:
 		logger.Error("HTTP server failed", "error", err)
-		return fmt.Errorf("failed to start HTTP server: %w", err)
+		return fmt.Errorf("Failed to start HTTP server: %w", err)
 
 	case <-interruptChan:
-		logger.Info("shutdown signal received")
+		logger.Info("Shutdown signal received")
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if err := httpServer.ShutdownHTTPServer(shutdownCtx); err != nil {
-			logger.Error("failed to shutdown HTTP server gracefully", "error", err)
+			logger.Error("Failed to shutdown HTTP server gracefully", "error", err)
 			return fmt.Errorf("failed to shutdown HTTP server gracefully: %w", err)
 		}
 
