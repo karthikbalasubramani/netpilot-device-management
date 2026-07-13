@@ -10,6 +10,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
+// SystemState represents the current system resource usage returned by the health API.
 type SystemState struct {
 	CPUUsagePercent    float64 `json:"cpu_usage_percent"`
 	MemoryUsagePercent float64 `json:"memory_usage_percent"`
@@ -21,35 +22,45 @@ type SystemState struct {
 	UptimeSeconds      uint64  `json:"uptime_seconds"`
 }
 
-func GetSystemInfoHealth() (*SystemState, error) {
-	// CPU Percentage
+// GetSystemInfoHealth collects CPU, memory, disk, and uptime details of the host system.
+// It returns an error if any system metric cannot be collected or if CPU usage crosses the threshold.
+func GetSystemInfoHealth(cpuThresholdPercent float64, diskPath string) (*SystemState, error) {
+	// Collect CPU usage percentage with a small sampling interval.
 	cpuPercentages, err := cpu.Percent(500*time.Millisecond, false)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to get CPU usage: %w", err)
+		return nil, fmt.Errorf("failed to get CPU usage: %w", err)
 	}
-	// Memory Stats
+
+	// Collect virtual memory statistics.
 	memoryStats, err := mem.VirtualMemory()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get memory usage: %w", err)
 	}
-	// Disk Stats
-	diskStats, err := disk.Usage("/")
+
+	// Collect disk usage statistics for the configured disk path.
+	diskStats, err := disk.Usage(diskPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get disk usage: %w", err)
+		return nil, fmt.Errorf("failed to get disk usage for path %s: %w", diskPath, err)
 	}
-	// Host stats
+
+	// Collect host information, including system uptime.
 	hostStats, err := host.Info()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get host info: %w", err)
 	}
-	// CPU Usage
+
+	// Read CPU usage from the collected CPU percentage list.
 	cpuUsage := 0.0
 	if len(cpuPercentages) > 0 {
 		cpuUsage = cpuPercentages[0]
 	}
-	if cpuUsage >= 60 {
-		return nil, fmt.Errorf("CPU Usage Percentage is greater than 60%%")
+
+	// Mark health check as failed if CPU usage is above the configured threshold.
+	if cpuUsage >= cpuThresholdPercent {
+		return nil, fmt.Errorf("CPU usage percentage %.2f%% is greater than threshold %.2f%%", cpuUsage, cpuThresholdPercent)
 	}
+
+	// Return final system state after collecting and validating all metrics.
 	return &SystemState{
 		CPUUsagePercent:    round(cpuUsage),
 		MemoryUsagePercent: round(memoryStats.UsedPercent),
@@ -62,14 +73,17 @@ func GetSystemInfoHealth() (*SystemState, error) {
 	}, nil
 }
 
+// bytesToMB converts bytes into megabytes.
 func bytesToMB(bytes uint64) uint64 {
 	return bytes / 1024 / 1024
 }
 
+// bytesToGB converts bytes into gigabytes.
 func bytesToGB(bytes uint64) uint64 {
 	return bytes / 1024 / 1024 / 1024
 }
 
+// round rounds a float value to two decimal places.
 func round(value float64) float64 {
 	return float64(int(value*100)) / 100
 }
