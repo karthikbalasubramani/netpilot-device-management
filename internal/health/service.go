@@ -24,7 +24,7 @@ type SystemState struct {
 
 // GetSystemInfoHealth collects CPU, memory, disk, and uptime details of the host system.
 // It returns an error if any system metric cannot be collected or if CPU usage crosses the threshold.
-func GetSystemInfoHealth(cpuThresholdPercent float64) (*SystemState, error) {
+func GetSystemInfoHealth(cpuThresholdPercent float64, diskPath string) (*SystemState, error) {
 	// Collect CPU usage percentage with a small sampling interval.
 	cpuPercentages, err := cpu.Percent(500*time.Millisecond, false)
 	if err != nil {
@@ -37,10 +37,10 @@ func GetSystemInfoHealth(cpuThresholdPercent float64) (*SystemState, error) {
 		return nil, fmt.Errorf("failed to get memory usage: %w", err)
 	}
 
-	// Collect disk usage statistics for the root disk path.
-	diskStats, err := disk.Usage("/")
+	// Collect disk usage statistics for the configured disk path.
+	diskStats, err := disk.Usage(diskPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get disk usage: %w", err)
+		return nil, fmt.Errorf("failed to get disk usage for path %s: %w", diskPath, err)
 	}
 
 	// Collect host information, including system uptime.
@@ -57,7 +57,11 @@ func GetSystemInfoHealth(cpuThresholdPercent float64) (*SystemState, error) {
 
 	// Mark health check as failed if CPU usage is above the configured threshold.
 	if cpuUsage >= cpuThresholdPercent {
-		return nil, fmt.Errorf("CPU usage percentage %.2f%% is greater than threshold %.2f%%", cpuUsage, cpuThresholdPercent)
+		return nil, fmt.Errorf(
+			"CPU usage percentage %.2f%% is greater than threshold %.2f%%",
+			cpuUsage,
+			cpuThresholdPercent,
+		)
 	}
 
 	// Return final system state after collecting and validating all metrics.

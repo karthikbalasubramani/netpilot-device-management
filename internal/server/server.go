@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
 )
 
 // Server holds the HTTP router, HTTP server instance, and application configuration.
@@ -34,7 +35,8 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	// Disable trusting all proxies by default.
 	if err := router.SetTrustedProxies(nil); err != nil {
-		panic(fmt.Errorf("Failed to set trusted proxies: %w", err))
+		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
+		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
 	}
 
 	server := &Server{
@@ -54,12 +56,18 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 // StartHTTPServer starts the HTTP server on the configured application port.
 func (s *Server) StartHTTPServer() error {
+	logger.Info("starting HTTP server", "port", s.config.AppPort)
 	return s.httpServer.ListenAndServe()
 }
 
 // ShutdownHTTPServer gracefully shuts down the HTTP server.
 func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
+	if s.httpServer == nil {
+		return nil
+	}
+
 	if err := s.httpServer.Shutdown(ctx); err != nil {
+		logger.Error(fmt.Sprintf("Failed to shutdown HTTP server: %v", err))
 		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
 	}
 
@@ -69,13 +77,16 @@ func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
 // registerRoutes registers all HTTP routes for the application.
 func (s *Server) registerRoutes() {
 	s.router.GET("/health", s.healthCheck)
+	logger.Debug("All the health routes are registered")
 }
 
 // healthCheck returns the current application and system health status.
 func (s *Server) healthCheck(ctx *gin.Context) {
 	// Collect current system state such as CPU, memory, disk, and uptime.
-	systemState, err := health.GetSystemInfoHealth(s.config.CPUThresholdPercent)
+	systemState, err := health.GetSystemInfoHealth(s.config.CPUThresholdPercent, s.config.DiskPath)
 	if err != nil {
+		logger.Warn("Health check degraded", "error", err)
+
 		ctx.JSON(http.StatusServiceUnavailable, gin.H{
 			"status":      "degraded",
 			"service":     s.config.AppName,
