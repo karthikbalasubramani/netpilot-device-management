@@ -22,8 +22,12 @@ func Run() error {
 	cfg := config.Load()
 	// Initialize global structured logger.
 	logger.Init(cfg.LogLevel)
-
-	logger.Debug("Configs are loaded from environment variables successfully")
+	err := cfg.ValidateEnvConfiguration()
+	if err == nil {
+		logger.Debug("Configs are loaded from environment variables successfully")
+	} else {
+		logger.Error(fmt.Sprintf("Configuration Value Validation failed: %v", err))
+	}
 
 	logger.Info("starting NetPilot API",
 		"application_name", cfg.AppName,

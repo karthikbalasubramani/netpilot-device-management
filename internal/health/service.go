@@ -57,7 +57,11 @@ func GetSystemInfoHealth(cpuThresholdPercent float64, diskPath string) (*SystemS
 
 	// Mark health check as failed if CPU usage is above the configured threshold.
 	if cpuUsage >= cpuThresholdPercent {
-		return nil, fmt.Errorf("CPU usage percentage %.2f%% is greater than threshold %.2f%%", cpuUsage, cpuThresholdPercent)
+		return nil, fmt.Errorf(
+			"CPU usage percentage %.2f%% is greater than threshold %.2f%%",
+			cpuUsage,
+			cpuThresholdPercent,
+		)
 	}
 
 	// Return final system state after collecting and validating all metrics.
