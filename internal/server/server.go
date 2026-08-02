@@ -9,6 +9,7 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/response"
 )
 
 // Server holds the HTTP router, HTTP server instance, and application configuration.
@@ -87,21 +88,26 @@ func (s *Server) healthCheck(ctx *gin.Context) {
 	if err != nil {
 		logger.Warn("Health check degraded", "error", err)
 
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":      "degraded",
-			"service":     s.config.AppName,
-			"environment": s.config.AppEnv,
-			"error":       err.Error(),
-		})
+		// Error Response for health check failure
+		response.ErrorResponse(
+			ctx,
+			http.StatusServiceUnavailable,
+			"Health Check Degraded",
+			err,
+		)
 		return
 	}
 
 	// Return successful health response when application and system checks pass.
-	ctx.JSON(http.StatusOK, gin.H{
-		"status":        "ok",
-		"service":       s.config.AppName,
-		"environment":   s.config.AppEnv,
-		"server_status": "Running",
-		"system_state":  systemState,
-	})
+	response.SuccessResponse(
+		ctx,
+		http.StatusOK,
+		"Health Check Successfull",
+		gin.H{
+			"status":        "ok",
+			"service":       s.config.AppName,
+			"environment":   s.config.AppEnv,
+			"server_status": "Running",
+			"system_state":  systemState,
+		})
 }
