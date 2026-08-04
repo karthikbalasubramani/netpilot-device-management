@@ -36,19 +36,19 @@ func RequestLogger() gin.HandlerFunc {
 
 		switch {
 		case statusCode >= http.StatusInternalServerError:
-			logger.Error(
+			logger.APIError(
 				"HTTP request completed with server error",
 				logAttributes...,
 			)
 
 		case statusCode >= http.StatusBadRequest:
-			logger.Warn(
+			logger.APIWarn(
 				"HTTP request completed with client error",
 				logAttributes...,
 			)
 
 		default:
-			logger.Info(
+			logger.APIInfo(
 				"HTTP request completed",
 				logAttributes...,
 			)
