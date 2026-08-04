@@ -32,3 +32,6 @@ venv/
 
 # Docker
 docker-data/
+
+# Generated application logs
+logs/
