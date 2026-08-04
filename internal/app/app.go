@@ -28,6 +28,47 @@ func Run() error {
 	} else {
 		logger.Error(fmt.Sprintf("Configuration Value Validation failed: %v", err))
 	}
+	apiLogConfig, err := config.LoadAPILogConfig()
+	if err != nil {
+		logger.Error(
+			"Failed to load API log configuration",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"load API log configuration: %w",
+			err,
+		)
+	}
+
+	if err := logger.InitAPILogger(logger.APILoggerConfig{
+		Enabled:    apiLogConfig.Enabled,
+		FilePath:   apiLogConfig.FilePath,
+		MaxSizeMB:  apiLogConfig.MaxSizeMB,
+		MaxBackups: apiLogConfig.MaxBackups,
+		MaxAgeDays: apiLogConfig.MaxAgeDays,
+		Compress:   apiLogConfig.Compress,
+	}); err != nil {
+		logger.Error(
+			"Failed to initialize API file logger",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize API file logger: %w",
+			err,
+		)
+	}
+
+	defer func() {
+		if err := logger.CloseAPILogger(); err != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"failed to close API file logger: %v\n",
+				err,
+			)
+		}
+	}()
 
 	logger.Info("starting NetPilot API",
 		"application_name", cfg.AppName,

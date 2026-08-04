@@ -9,6 +9,7 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/middleware"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/response"
 )
 
@@ -30,8 +31,12 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	// Create a new Gin router without default middleware.
 	router := gin.New()
 
-	// Add required middleware explicitly.
-	router.Use(gin.Logger())
+	// Middlewares
+	// Add Request ID if ID is not available by default
+	router.Use(middleware.RequestID())
+
+	router.Use(middleware.RequestLogger())
+	router.Use(middleware.SecurityHeaders())
 	router.Use(gin.Recovery())
 
 	// Disable trusting all proxies by default.

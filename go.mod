@@ -4,9 +4,11 @@ go 1.26.4
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/shirou/gopsutil/v4 v4.26.6
 	go.mongodb.org/mongo-driver v1.17.9
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
