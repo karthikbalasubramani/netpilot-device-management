@@ -36,6 +36,7 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	router.Use(middleware.RequestID())
 
 	router.Use(middleware.RequestLogger())
+	router.Use(middleware.SecurityHeaders())
 	router.Use(gin.Recovery())
 
 	// Disable trusting all proxies by default.
