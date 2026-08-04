@@ -35,7 +35,7 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	// Add Request ID if ID is not available by default
 	router.Use(middleware.RequestID())
 
-	router.Use(gin.Logger())
+	router.Use(middleware.RequestLogger())
 	router.Use(gin.Recovery())
 
 	// Disable trusting all proxies by default.
