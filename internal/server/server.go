@@ -39,6 +39,9 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	router.Use(middleware.SecurityHeaders())
 	router.Use(middleware.Recovery())
 
+	// Register Error Handler for HTTP 404 and 405 type of requests
+	registerErrorHandlers(router)
+
 	// Disable trusting all proxies by default.
 	if err := router.SetTrustedProxies(nil); err != nil {
 		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
