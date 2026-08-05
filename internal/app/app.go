@@ -86,8 +86,8 @@ func Run() error {
 		}
 	}()
 
-	// Load and validate HTTP server timeout configuration after godotenv has
-	// loaded the .env values.
+	// Load and validate HTTP server configuration after godotenv has loaded
+	// values from .env.
 	httpServerConfig, err := config.LoadHTTPServerConfig()
 	if err != nil {
 		logger.Error(
@@ -113,6 +113,8 @@ func Run() error {
 		httpServerConfig.IdleTimeout.String(),
 		"max_header_bytes",
 		httpServerConfig.MaxHeaderBytes,
+		"max_request_body_bytes",
+		httpServerConfig.MaxRequestBodyBytes,
 	)
 
 	logger.Info(
@@ -155,7 +157,6 @@ func Run() error {
 		"database", cfg.MongoDatabase,
 	)
 
-	// Initialize the HTTP server with application and timeout configuration.
 	httpServer, err := server.NewHTTPServer(
 		cfg,
 		httpServerConfig,
@@ -172,8 +173,6 @@ func Run() error {
 		)
 	}
 
-	// Start the HTTP server in a separate goroutine so the main goroutine can
-	// listen for shutdown signals.
 	serverErrorChannel := make(chan error, 1)
 
 	go func() {
@@ -183,7 +182,6 @@ func Run() error {
 		}
 	}()
 
-	// Listen for Ctrl+C and Docker/Kubernetes SIGTERM signals.
 	interruptChannel := make(chan os.Signal, 1)
 	signal.Notify(
 		interruptChannel,
@@ -215,7 +213,9 @@ func Run() error {
 			httpServerShutdownTimeout,
 		)
 
-		shutdownErr := httpServer.ShutdownHTTPServer(shutdownContext)
+		shutdownErr := httpServer.ShutdownHTTPServer(
+			shutdownContext,
+		)
 		cancel()
 
 		if shutdownErr != nil {

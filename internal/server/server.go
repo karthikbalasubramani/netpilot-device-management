@@ -50,6 +50,9 @@ func NewHTTPServer(
 		middleware.RequestLogger(),
 		middleware.SecurityHeaders(),
 		middleware.Recovery(),
+		middleware.RequestBodyLimit(
+			httpServerConfig.MaxRequestBodyBytes,
+		),
 	)
 
 	// Register standard handlers for HTTP 404 and 405 responses.
@@ -136,6 +139,7 @@ func (server *Server) healthCheck(ctx *gin.Context) {
 			"Health Check Degraded",
 			err,
 		)
+
 		return
 	}
 

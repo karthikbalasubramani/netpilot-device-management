@@ -14,22 +14,25 @@ const (
 	defaultHTTPWriteTimeoutSeconds      = 30
 	defaultHTTPIdleTimeoutSeconds       = 60
 	defaultHTTPMaxHeaderBytes           = 1 << 20
+	defaultHTTPMaxRequestBodyBytes      = 1 << 20
 )
 
-// HTTPServerConfig contains the timeout and request-header limits used by
-// NetPilot's HTTP server.
+// HTTPServerConfig contains timeout and request-size settings for the
+// NetPilot HTTP server.
 type HTTPServerConfig struct {
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	MaxHeaderBytes    int
+	ReadHeaderTimeout   time.Duration
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
+	IdleTimeout         time.Duration
+	MaxHeaderBytes      int
+	MaxRequestBodyBytes int64
 }
 
-// LoadHTTPServerConfig loads HTTP server settings from environment variables.
+// LoadHTTPServerConfig loads HTTP server configuration from environment
+// variables.
 //
-// config.Load must be called before this function so godotenv has already
-// loaded values from the .env file.
+// config.Load must run before this function so godotenv has already loaded
+// values from .env into the process environment.
 func LoadHTTPServerConfig() (HTTPServerConfig, error) {
 	readHeaderTimeoutSeconds, err := httpServerIntEnv(
 		"HTTP_READ_HEADER_TIMEOUT_SECONDS",
@@ -71,7 +74,15 @@ func LoadHTTPServerConfig() (HTTPServerConfig, error) {
 		return HTTPServerConfig{}, err
 	}
 
-	httpServerConfig := HTTPServerConfig{
+	maxRequestBodyBytes, err := httpServerInt64Env(
+		"HTTP_MAX_REQUEST_BODY_BYTES",
+		defaultHTTPMaxRequestBodyBytes,
+	)
+	if err != nil {
+		return HTTPServerConfig{}, err
+	}
+
+	serverConfig := HTTPServerConfig{
 		ReadHeaderTimeout: time.Duration(
 			readHeaderTimeoutSeconds,
 		) * time.Second,
@@ -84,17 +95,18 @@ func LoadHTTPServerConfig() (HTTPServerConfig, error) {
 		IdleTimeout: time.Duration(
 			idleTimeoutSeconds,
 		) * time.Second,
-		MaxHeaderBytes: maxHeaderBytes,
+		MaxHeaderBytes:      maxHeaderBytes,
+		MaxRequestBodyBytes: maxRequestBodyBytes,
 	}
 
-	if err := httpServerConfig.Validate(); err != nil {
+	if err := serverConfig.Validate(); err != nil {
 		return HTTPServerConfig{}, err
 	}
 
-	return httpServerConfig, nil
+	return serverConfig, nil
 }
 
-// Validate checks whether the HTTP server settings are valid.
+// Validate verifies that the HTTP server configuration is safe and valid.
 func (config HTTPServerConfig) Validate() error {
 	if config.ReadHeaderTimeout <= 0 {
 		return fmt.Errorf(
@@ -126,6 +138,12 @@ func (config HTTPServerConfig) Validate() error {
 		)
 	}
 
+	if config.MaxRequestBodyBytes <= 0 {
+		return fmt.Errorf(
+			"HTTP_MAX_REQUEST_BODY_BYTES must be greater than zero",
+		)
+	}
+
 	if config.ReadHeaderTimeout > config.ReadTimeout {
 		return fmt.Errorf(
 			"HTTP_READ_HEADER_TIMEOUT_SECONDS cannot be greater " +
@@ -154,5 +172,28 @@ func httpServerIntEnv(
 			err,
 		)
 	}
+
+	return parsedValue, nil
+}
+
+func httpServerInt64Env(
+	key string,
+	defaultValue int64,
+) (int64, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+
+	if value == "" {
+		return defaultValue, nil
+	}
+
+	parsedValue, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf(
+			"%s must be a valid integer: %w",
+			key,
+			err,
+		)
+	}
+
 	return parsedValue, nil
 }
