@@ -117,6 +117,19 @@ func Run() error {
 		httpServerConfig.MaxRequestBodyBytes,
 	)
 
+	// Load health-probe configuration.
+
+	healthProbeConfig, err := config.LoadHealthProbeConfig()
+	if err != nil {
+		logger.Error("Failed to load health probe configuration", "error", err)
+		return fmt.Errorf("load health probe configuration: %w", err)
+	}
+	logger.Debug(
+		"Health probe configuration loaded",
+		"readiness_timeout",
+		healthProbeConfig.ReadinessTimeout.String(),
+	)
+
 	logger.Info(
 		"Starting NetPilot API",
 		"application_name", cfg.AppName,
@@ -157,10 +170,14 @@ func Run() error {
 		"database", cfg.MongoDatabase,
 	)
 
+	readinessCheck := func(ctx context.Context) error {
+		return database.CheckMongoDBReadiness(ctx, mongoDB.Client)
+	}
+
 	httpServer, err := server.NewHTTPServer(
-		cfg,
-		httpServerConfig,
+		cfg, httpServerConfig, healthProbeConfig, readinessCheck,
 	)
+
 	if err != nil {
 		logger.Error(
 			"Failed to initialize HTTP server",
