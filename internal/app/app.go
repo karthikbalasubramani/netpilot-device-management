@@ -16,18 +16,34 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/server"
 )
 
+const httpServerShutdownTimeout = 10 * time.Second
+
 // Run initializes application dependencies and starts the NetPilot API server.
 func Run() error {
-	// Load application configuration from environment variables.
+	// Load .env values and application configuration.
 	cfg := config.Load()
-	// Initialize global structured logger.
+
+	// Initialize the terminal application logger before validating the
+	// configuration so validation failures can be logged.
 	logger.Init(cfg.LogLevel)
-	err := cfg.ValidateEnvConfiguration()
-	if err == nil {
-		logger.Debug("Configs are loaded from environment variables successfully")
-	} else {
-		logger.Error(fmt.Sprintf("Configuration Value Validation failed: %v", err))
+
+	if err := cfg.ValidateEnvConfiguration(); err != nil {
+		logger.Error(
+			"Application configuration validation failed",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"validate application configuration: %w",
+			err,
+		)
 	}
+
+	logger.Debug(
+		"Configuration loaded from environment variables successfully",
+	)
+
+	// Initialize the dedicated API access file logger.
 	apiLogConfig, err := config.LoadAPILogConfig()
 	if err != nil {
 		logger.Error(
@@ -70,67 +86,152 @@ func Run() error {
 		}
 	}()
 
-	logger.Info("starting NetPilot API",
+	// Load and validate HTTP server timeout configuration after godotenv has
+	// loaded the .env values.
+	httpServerConfig, err := config.LoadHTTPServerConfig()
+	if err != nil {
+		logger.Error(
+			"Failed to load HTTP server configuration",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"load HTTP server configuration: %w",
+			err,
+		)
+	}
+
+	logger.Debug(
+		"HTTP server configuration loaded",
+		"read_header_timeout",
+		httpServerConfig.ReadHeaderTimeout.String(),
+		"read_timeout",
+		httpServerConfig.ReadTimeout.String(),
+		"write_timeout",
+		httpServerConfig.WriteTimeout.String(),
+		"idle_timeout",
+		httpServerConfig.IdleTimeout.String(),
+		"max_header_bytes",
+		httpServerConfig.MaxHeaderBytes,
+	)
+
+	logger.Info(
+		"Starting NetPilot API",
 		"application_name", cfg.AppName,
 		"environment", cfg.AppEnv,
 		"port", cfg.AppPort,
 	)
 
-	// Establish MongoDB connection during application startup.
+	// Establish the MongoDB connection during application startup.
 	mongoDB, err := database.ConnectMongoDB(cfg)
 	if err != nil {
-		logger.Error("Failed to connect MongoDB", "error", err)
-		return fmt.Errorf("Failed to connect MongoDB: %w", err)
+		logger.Error(
+			"Failed to connect to MongoDB",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"connect to MongoDB: %w",
+			err,
+		)
 	}
 
-	// Register MongoDB disconnect logic to run before application shutdown.
+	// Register MongoDB disconnection before starting the HTTP server.
 	defer func() {
 		if err := database.Disconnect(mongoDB); err != nil {
-			logger.Error("Failed to disconnect MongoDB", "error", err)
-		} else {
-			logger.Info("MongoDB disconnected successfully")
+			logger.Error(
+				"Failed to disconnect from MongoDB",
+				"error", err,
+			)
+
+			return
 		}
+
+		logger.Info("MongoDB disconnected successfully")
 	}()
 
-	logger.Info("MongoDB connected successfully", "database", cfg.MongoDatabase)
+	logger.Info(
+		"MongoDB connected successfully",
+		"database", cfg.MongoDatabase,
+	)
 
-	// Initialize HTTP server with application configuration.
-	httpServer := server.NewHTTPServer(cfg)
+	// Initialize the HTTP server with application and timeout configuration.
+	httpServer, err := server.NewHTTPServer(
+		cfg,
+		httpServerConfig,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize HTTP server",
+			"error", err,
+		)
 
-	// Start the HTTP server in a separate goroutine so the main flow can listen for shutdown signals.
-	serverErrorChan := make(chan error, 1)
+		return fmt.Errorf(
+			"initialize HTTP server: %w",
+			err,
+		)
+	}
+
+	// Start the HTTP server in a separate goroutine so the main goroutine can
+	// listen for shutdown signals.
+	serverErrorChannel := make(chan error, 1)
 
 	go func() {
-		if err := httpServer.StartHTTPServer(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErrorChan <- err
+		if err := httpServer.StartHTTPServer(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+			serverErrorChannel <- err
 		}
 	}()
 
-	// Listen for operating system shutdown signals.
-	// os.Interrupt handles Ctrl+C.
-	// syscall.SIGTERM handles Docker/Kubernetes termination.
-	interruptChan := make(chan os.Signal, 1)
-	signal.Notify(interruptChan, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(interruptChan)
+	// Listen for Ctrl+C and Docker/Kubernetes SIGTERM signals.
+	interruptChannel := make(chan os.Signal, 1)
+	signal.Notify(
+		interruptChannel,
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer signal.Stop(interruptChannel)
 
-	// Keep the application running until either the server fails or a shutdown signal is received.
 	select {
-	case err := <-serverErrorChan:
-		logger.Error("HTTP server failed", "error", err)
-		return fmt.Errorf("Failed to start HTTP server: %w", err)
+	case err := <-serverErrorChannel:
+		logger.Error(
+			"HTTP server stopped unexpectedly",
+			"error", err,
+		)
 
-	case <-interruptChan:
-		logger.Info("Shutdown signal received")
+		return fmt.Errorf(
+			"HTTP server failed: %w",
+			err,
+		)
 
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+	case receivedSignal := <-interruptChannel:
+		logger.Info(
+			"Shutdown signal received",
+			"signal", receivedSignal.String(),
+		)
 
-		if err := httpServer.ShutdownHTTPServer(shutdownCtx); err != nil {
-			logger.Error("Failed to shutdown HTTP server gracefully", "error", err)
-			return fmt.Errorf("failed to shutdown HTTP server gracefully: %w", err)
+		shutdownContext, cancel := context.WithTimeout(
+			context.Background(),
+			httpServerShutdownTimeout,
+		)
+
+		shutdownErr := httpServer.ShutdownHTTPServer(shutdownContext)
+		cancel()
+
+		if shutdownErr != nil {
+			logger.Error(
+				"Failed to shut down HTTP server gracefully",
+				"error", shutdownErr,
+			)
+
+			return fmt.Errorf(
+				"shut down HTTP server gracefully: %w",
+				shutdownErr,
+			)
 		}
 
-		logger.Info("HTTP server shutdown successfully")
+		logger.Info("HTTP server shut down successfully")
+
 		return nil
 	}
 }

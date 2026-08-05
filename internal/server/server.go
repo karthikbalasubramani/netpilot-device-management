@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/health"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
@@ -13,41 +14,45 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/response"
 )
 
-// Server holds the HTTP router, HTTP server instance, and application configuration.
+// Server holds the HTTP router, HTTP server instance, and application
+// configuration.
 type Server struct {
 	config     *config.Config
 	router     *gin.Engine
 	httpServer *http.Server
 }
 
-// NewHTTPServer creates a new HTTP server instance, configures middleware,
-// disables default trusted proxies, and registers application routes.
-func NewHTTPServer(cfg *config.Config) *Server {
-	// Run Gin in release mode when application environment is production.
+// NewHTTPServer creates and configures the NetPilot HTTP server.
+func NewHTTPServer(
+	cfg *config.Config,
+	httpServerConfig config.HTTPServerConfig,
+) (*Server, error) {
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Create a new Gin router without default middleware.
+	// Create a Gin router without Gin's default logging and recovery
+	// middleware.
 	router := gin.New()
 
 	// NetPilot currently receives requests directly without a trusted reverse
-	// proxy. Disable proxy-header trust so clients cannot spoof their IP address
-	// through X-Forwarded-For or X-Real-IP.
+	// proxy. Disable proxy-header trust so clients cannot spoof their IP
+	// address through X-Forwarded-For or X-Real-IP.
 	if err := router.SetTrustedProxies(nil); err != nil {
-		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
-		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
+		return nil, fmt.Errorf(
+			"disable trusted proxy headers: %w",
+			err,
+		)
 	}
 
-	// Middlewares
-	// Add Request ID if ID is not available by default
-	router.Use(middleware.RequestID())
+	router.Use(
+		middleware.RequestID(),
+		middleware.RequestLogger(),
+		middleware.SecurityHeaders(),
+		middleware.Recovery(),
+	)
 
-	router.Use(middleware.RequestLogger())
-	router.Use(middleware.SecurityHeaders())
-	router.Use(middleware.Recovery())
-
-	// Register Error Handler for HTTP 404 and 405 type of requests
+	// Register standard handlers for HTTP 404 and 405 responses.
 	registerErrorHandlers(router)
 
 	server := &Server{
@@ -58,53 +63,73 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	server.registerRoutes()
 
 	server.httpServer = &http.Server{
-		Addr:    fmt.Sprintf(":%s", cfg.AppPort),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%s", cfg.AppPort),
+		Handler:           router,
+		ReadHeaderTimeout: httpServerConfig.ReadHeaderTimeout,
+		ReadTimeout:       httpServerConfig.ReadTimeout,
+		WriteTimeout:      httpServerConfig.WriteTimeout,
+		IdleTimeout:       httpServerConfig.IdleTimeout,
+		MaxHeaderBytes:    httpServerConfig.MaxHeaderBytes,
 	}
 
-	return server
+	return server, nil
 }
 
 // StartHTTPServer starts the HTTP server on the configured application port.
-func (s *Server) StartHTTPServer() error {
-	logger.Info("starting HTTP server", "port", s.config.AppPort)
-	return s.httpServer.ListenAndServe()
+func (server *Server) StartHTTPServer() error {
+	logger.Info(
+		"Starting HTTP server",
+		"port", server.config.AppPort,
+	)
+
+	return server.httpServer.ListenAndServe()
 }
 
 // ShutdownHTTPServer gracefully shuts down the HTTP server.
-func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
-	if s.httpServer == nil {
+func (server *Server) ShutdownHTTPServer(ctx context.Context) error {
+	if server.httpServer == nil {
 		return nil
 	}
 
-	if err := s.httpServer.Shutdown(ctx); err != nil {
-		logger.Error(fmt.Sprintf("Failed to shutdown HTTP server: %v", err))
-		return fmt.Errorf("failed to shutdown HTTP server: %w", err)
+	if err := server.httpServer.Shutdown(ctx); err != nil {
+		logger.Error(
+			"Failed to shut down HTTP server",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"shut down HTTP server: %w",
+			err,
+		)
 	}
 
 	return nil
 }
 
 // registerRoutes registers all HTTP routes for the application.
-func (s *Server) registerRoutes() {
-	s.router.GET("/health", s.healthCheck)
-	s.router.GET(
+func (server *Server) registerRoutes() {
+	server.router.GET("/health", server.healthCheck)
+	server.router.GET(
 		"/debug/panic",
 		func(ctx *gin.Context) {
 			panic("manual recovery middleware test")
 		},
 	)
-	logger.Debug("All the health routes are registered")
+	logger.Debug("Health routes registered successfully")
 }
 
 // healthCheck returns the current application and system health status.
-func (s *Server) healthCheck(ctx *gin.Context) {
-	// Collect current system state such as CPU, memory, disk, and uptime.
-	systemState, err := health.GetSystemInfoHealth(s.config.CPUThresholdPercent, s.config.DiskPath)
+func (server *Server) healthCheck(ctx *gin.Context) {
+	systemState, err := health.GetSystemInfoHealth(
+		server.config.CPUThresholdPercent,
+		server.config.DiskPath,
+	)
 	if err != nil {
-		logger.Warn("Health check degraded", "error", err)
+		logger.Warn(
+			"Health check degraded",
+			"error", err,
+		)
 
-		// Error Response for health check failure
 		response.ErrorResponse(
 			ctx,
 			http.StatusServiceUnavailable,
@@ -114,16 +139,16 @@ func (s *Server) healthCheck(ctx *gin.Context) {
 		return
 	}
 
-	// Return successful health response when application and system checks pass.
 	response.SuccessResponse(
 		ctx,
 		http.StatusOK,
-		"Health Check Successfull",
+		"Health Check Successful",
 		gin.H{
 			"status":        "ok",
-			"service":       s.config.AppName,
-			"environment":   s.config.AppEnv,
+			"service":       server.config.AppName,
+			"environment":   server.config.AppEnv,
 			"server_status": "Running",
 			"system_state":  systemState,
-		})
+		},
+	)
 }
