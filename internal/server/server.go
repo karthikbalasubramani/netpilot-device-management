@@ -31,6 +31,14 @@ func NewHTTPServer(cfg *config.Config) *Server {
 	// Create a new Gin router without default middleware.
 	router := gin.New()
 
+	// NetPilot currently receives requests directly without a trusted reverse
+	// proxy. Disable proxy-header trust so clients cannot spoof their IP address
+	// through X-Forwarded-For or X-Real-IP.
+	if err := router.SetTrustedProxies(nil); err != nil {
+		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
+		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
+	}
+
 	// Middlewares
 	// Add Request ID if ID is not available by default
 	router.Use(middleware.RequestID())
@@ -41,12 +49,6 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	// Register Error Handler for HTTP 404 and 405 type of requests
 	registerErrorHandlers(router)
-
-	// Disable trusting all proxies by default.
-	if err := router.SetTrustedProxies(nil); err != nil {
-		logger.Error(fmt.Sprintf("Failed to set trusted proxies: %v", err))
-		panic(fmt.Errorf("failed to set trusted proxies: %w", err))
-	}
 
 	server := &Server{
 		config: cfg,
