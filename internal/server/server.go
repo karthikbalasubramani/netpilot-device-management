@@ -37,7 +37,7 @@ func NewHTTPServer(cfg *config.Config) *Server {
 
 	router.Use(middleware.RequestLogger())
 	router.Use(middleware.SecurityHeaders())
-	router.Use(gin.Recovery())
+	router.Use(middleware.Recovery())
 
 	// Disable trusting all proxies by default.
 	if err := router.SetTrustedProxies(nil); err != nil {
@@ -83,6 +83,12 @@ func (s *Server) ShutdownHTTPServer(ctx context.Context) error {
 // registerRoutes registers all HTTP routes for the application.
 func (s *Server) registerRoutes() {
 	s.router.GET("/health", s.healthCheck)
+	s.router.GET(
+		"/debug/panic",
+		func(ctx *gin.Context) {
+			panic("manual recovery middleware test")
+		},
+	)
 	logger.Debug("All the health routes are registered")
 }
 
