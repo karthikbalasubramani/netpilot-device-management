@@ -17,8 +17,8 @@ const (
 	serviceNotReadyCode    = "SERVICE_NOT_READY"
 )
 
-// registerRoutes registers application and health-probe routes.
-func (server *Server) registerRoutes() {
+// registerHealthRoutes registers infrastructure health endpoints.
+func (server *Server) registerHealthRoutes() {
 	server.router.GET("/health", server.healthCheck)
 	server.router.GET("/health/live", server.livenessProbe)
 	server.router.GET("/health/ready", server.readinessProbe)
