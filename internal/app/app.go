@@ -16,7 +16,10 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/server"
 )
 
-const httpServerShutdownTimeout = 10 * time.Second
+const (
+	httpServerShutdownTimeout = 10 * time.Second
+	databaseSetupTimeout      = 10 * time.Second
+)
 
 // Run initializes application dependencies and starts the NetPilot API server.
 func Run() error {
@@ -168,6 +171,36 @@ func Run() error {
 	logger.Info(
 		"MongoDB connected successfully",
 		"database", cfg.MongoDatabase,
+	)
+
+	// Prepare prerequisits MongoDB collections
+	databaseSetupContext, cancelDatabaseSetup := context.WithTimeout(
+		context.Background(),
+		databaseSetupTimeout,
+	)
+
+	err = database.EnsureDeviceCollection(
+		databaseSetupContext,
+		mongoDB.Client,
+		cfg.MongoDatabase,
+	)
+
+	cancelDatabaseSetup()
+
+	if err != nil {
+		logger.Error(
+			"Initialize devices collection failed: %w", err,
+		)
+		return fmt.Errorf(
+			"Initialize devices collection failed: %w",
+			err,
+		)
+	}
+
+	logger.Info(
+		"Device collection initialized successfully",
+		"database", cfg.MongoDatabase,
+		"collection", database.DeviceCollectionName,
 	)
 
 	readinessCheck := func(ctx context.Context) error {
