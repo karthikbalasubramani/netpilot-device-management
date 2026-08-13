@@ -14,9 +14,11 @@ const apiVersionV1 = "v1"
 func (server *Server) registerV1Routes(apiV1 *gin.RouterGroup) {
 	apiV1.GET("", server.apiV1Info)
 
+	server.registerAuthRoutes(apiV1)
+
 	logger.Debug(
 		"API v1 routes registered successfully",
-		"base_path", apiV1basepath,
+		"base_path", ApiV1basepath,
 	)
 }
 
