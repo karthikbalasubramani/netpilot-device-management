@@ -22,6 +22,7 @@ type Server struct {
 	config            *config.Config
 	healthProbeConfig config.HealthProbeConfig
 	checkReadiness    ReadinessCheck
+	authService       AuthService
 	router            *gin.Engine
 	httpServer        *http.Server
 }
@@ -32,6 +33,7 @@ func NewHTTPServer(
 	httpServerConfig config.HTTPServerConfig,
 	healthProbeConfig config.HealthProbeConfig,
 	readinessCheck ReadinessCheck,
+	authService AuthService,
 ) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf(
@@ -78,6 +80,7 @@ func NewHTTPServer(
 		config:            cfg,
 		healthProbeConfig: healthProbeConfig,
 		checkReadiness:    readinessCheck,
+		authService:       authService,
 		router:            router,
 	}
 
