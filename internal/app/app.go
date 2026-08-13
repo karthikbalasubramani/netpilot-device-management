@@ -203,6 +203,38 @@ func Run() error {
 		"collection", database.DeviceCollectionName,
 	)
 
+	// Prepare the User collection and authentication-related indexes.
+	userSetupContext, cancelUserSetup := context.WithTimeout(
+		context.Background(),
+		databaseSetupTimeout,
+	)
+
+	err = database.EnsureUserCollection(
+		userSetupContext,
+		mongoDB.Client,
+		cfg.MongoDatabase,
+	)
+
+	cancelUserSetup()
+
+	if err != nil {
+		logger.Error(
+			"Failed to initialize users collection",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize users collection: %w",
+			err,
+		)
+	}
+
+	logger.Info(
+		"User collection initialized successfully",
+		"database", cfg.MongoDatabase,
+		"collection", database.UserCollectionName,
+	)
+
 	readinessCheck := func(ctx context.Context) error {
 		return database.CheckMongoDBReadiness(ctx, mongoDB.Client)
 	}
