@@ -151,6 +151,12 @@ func Run() error {
 		"Authentication configuration loaded",
 		"bcrypt_cost",
 		authConfig.BcryptCost,
+		"jwt_issuer",
+		authConfig.JWTIssuer,
+		"jwt_audience",
+		authConfig.JWTAudience,
+		"access_token_ttl",
+		authConfig.JWTAccessTokenTTLMinutes.String(),
 	)
 
 	logger.Info(
@@ -290,9 +296,28 @@ func Run() error {
 		)
 	}
 
+	accessTokenIssuer, err := auth.NewAccessTokenIssuer(
+		authConfig.JWTSecret,
+		authConfig.JWTIssuer,
+		authConfig.JWTAudience,
+		authConfig.JWTAccessTokenTTLMinutes,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize JWT access token issuer",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize JWT access token issuer: %w",
+			err,
+		)
+	}
+
 	authService, err := auth.NewService(
 		userRepository,
 		passwordHasher,
+		accessTokenIssuer,
 	)
 	if err != nil {
 		logger.Error(

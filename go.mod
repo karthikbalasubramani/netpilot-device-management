@@ -4,10 +4,12 @@ go 1.26.4
 
 require (
 	github.com/gin-gonic/gin v1.12.0
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/shirou/gopsutil/v4 v4.26.6
 	go.mongodb.org/mongo-driver v1.17.9
+	golang.org/x/crypto v0.55.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
@@ -50,7 +52,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

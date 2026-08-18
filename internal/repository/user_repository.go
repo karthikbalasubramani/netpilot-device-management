@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -168,4 +169,65 @@ func (repository *mongoUserRepository) GetByUserID(
 	}
 
 	return &storedUser, nil
+}
+
+// UpdateLastLogin records the most recent successful authentication time.
+func (repository *mongoUserRepository) UpdateLastLogin(
+	ctx context.Context,
+	userID string,
+	lastLoginAt time.Time,
+) error {
+	normalizedUserID := strings.TrimSpace(
+		userID,
+	)
+
+	if normalizedUserID == "" {
+		return fmt.Errorf(
+			"user ID is required",
+		)
+	}
+
+	filter := bson.D{
+		{
+			Key:   "user_id",
+			Value: normalizedUserID,
+		},
+	}
+	update := bson.D{
+		{
+			Key: "$set",
+			Value: bson.D{
+				{
+					Key:   "last_login_at",
+					Value: lastLoginAt,
+				},
+				{
+					Key:   "updated_at",
+					Value: lastLoginAt,
+				},
+			},
+		},
+	}
+
+	result, err := repository.collection.UpdateOne(
+		ctx,
+		filter,
+		update,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"update last login for user %q: %w",
+			normalizedUserID,
+			err,
+		)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf(
+			"%w: user_id %q",
+			user.ErrNotFound,
+			normalizedUserID,
+		)
+	}
+	return nil
 }

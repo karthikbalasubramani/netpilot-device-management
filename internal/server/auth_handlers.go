@@ -22,6 +22,18 @@ const (
 
 	registrationFailedMessage = "User registration could not be completed"
 	registrationFailedCode    = "USER_REGISTRATION_FAILED"
+
+	invalidLoginRequestMessage = "Invalid login request"
+	invalidLoginRequestCode    = "INVALID_LOGIN_REQUEST"
+
+	invalidCredentialsMessage = "Invalid email or password"
+	invalidCredentialsCode    = "INVALID_CREDENTIALS"
+
+	accountUnavailableMessage = "User account is not available for login"
+	accountUnavailableCode    = "ACCOUNT_UNAVAILABLE"
+
+	loginFailedMessage = "Login could not be completed"
+	loginFailedCode    = "LOGIN_FAILED"
 )
 
 // AuthService defines the authentication operations required by the HTTP
@@ -31,6 +43,11 @@ type AuthService interface {
 		ctx context.Context,
 		request auth.RegisterRequest,
 	) (*auth.RegisterResponse, error)
+
+	Login(
+		ctx context.Context,
+		request auth.LoginRequest,
+	) (*auth.LoginResponse, error)
 }
 
 // registerAuthRoutes registers version 1 authentication routes.
@@ -42,6 +59,11 @@ func (server *Server) registerAuthRoutes(
 	authRoutes.POST(
 		"/register",
 		server.registerUser,
+	)
+
+	authRoutes.POST(
+		"/login",
+		server.loginUser,
 	)
 
 	logger.Debug(
@@ -130,6 +152,91 @@ func (server *Server) registerUser(
 		http.StatusCreated,
 		"User registered successfully",
 		registeredUser,
+	)
+}
+
+// loginUser handles NetPilot user authentication.
+func (server *Server) loginUser(
+	ctx *gin.Context,
+) {
+	requestID := ctx.GetString(
+		middleware.RequestIDKey,
+	)
+
+	var request auth.LoginRequest
+
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		logger.Warn(
+			"Invalid login request body",
+			"request_id", requestID,
+			"error", err,
+		)
+
+		response.WriteHTTPError(
+			ctx,
+			http.StatusBadRequest,
+			invalidLoginRequestMessage,
+			invalidLoginRequestCode,
+			requestID,
+		)
+
+		return
+	}
+
+	loginResponse, err := server.authService.Login(
+		ctx.Request.Context(),
+		request,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(
+			err,
+			auth.ErrInvalidCredentials,
+		):
+			response.WriteHTTPError(
+				ctx,
+				http.StatusUnauthorized,
+				invalidCredentialsMessage,
+				invalidCredentialsCode,
+				requestID,
+			)
+
+		case errors.Is(
+			err,
+			auth.ErrAccountUnavailable,
+		):
+			response.WriteHTTPError(
+				ctx,
+				http.StatusForbidden,
+				accountUnavailableMessage,
+				accountUnavailableCode,
+				requestID,
+			)
+
+		default:
+			logger.Error(
+				"User login failed",
+				"request_id", requestID,
+				"error", err,
+			)
+
+			response.WriteHTTPError(
+				ctx,
+				http.StatusInternalServerError,
+				loginFailedMessage,
+				loginFailedCode,
+				requestID,
+			)
+		}
+
+		return
+	}
+
+	response.SuccessResponse(
+		ctx,
+		http.StatusOK,
+		"Login successful",
+		loginResponse,
 	)
 }
 

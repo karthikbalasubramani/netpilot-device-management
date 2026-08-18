@@ -3,6 +3,7 @@ package user
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var (
@@ -33,4 +34,10 @@ type Repository interface {
 		ctx context.Context,
 		userID string,
 	) (*User, error)
+
+	UpdateLastLogin(
+		ctx context.Context,
+		userID string,
+		lastLoginAt time.Time,
+	) error
 }
