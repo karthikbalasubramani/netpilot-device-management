@@ -10,13 +10,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/auth"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/database"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/repository"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/server"
 )
 
-const httpServerShutdownTimeout = 10 * time.Second
+const (
+	httpServerShutdownTimeout = 10 * time.Second
+	databaseSetupTimeout      = 10 * time.Second
+)
 
 // Run initializes application dependencies and starts the NetPilot API server.
 func Run() error {
@@ -118,7 +123,6 @@ func Run() error {
 	)
 
 	// Load health-probe configuration.
-
 	healthProbeConfig, err := config.LoadHealthProbeConfig()
 	if err != nil {
 		logger.Error("Failed to load health probe configuration", "error", err)
@@ -128,6 +132,31 @@ func Run() error {
 		"Health probe configuration loaded",
 		"readiness_timeout",
 		healthProbeConfig.ReadinessTimeout.String(),
+	)
+
+	authConfig, err := config.LoadAuthConfig()
+	if err != nil {
+		logger.Error(
+			"Failed to load authentication configuration",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"load authentication configuration: %w",
+			err,
+		)
+	}
+
+	logger.Debug(
+		"Authentication configuration loaded",
+		"bcrypt_cost",
+		authConfig.BcryptCost,
+		"jwt_issuer",
+		authConfig.JWTIssuer,
+		"jwt_audience",
+		authConfig.JWTAudience,
+		"access_token_ttl",
+		authConfig.JWTAccessTokenTTLMinutes.String(),
 	)
 
 	logger.Info(
@@ -170,12 +199,148 @@ func Run() error {
 		"database", cfg.MongoDatabase,
 	)
 
+	// Prepare prerequisits MongoDB collections
+	databaseSetupContext, cancelDatabaseSetup := context.WithTimeout(
+		context.Background(),
+		databaseSetupTimeout,
+	)
+
+	err = database.EnsureDeviceCollection(
+		databaseSetupContext,
+		mongoDB.Client,
+		cfg.MongoDatabase,
+	)
+
+	cancelDatabaseSetup()
+
+	if err != nil {
+		logger.Error(
+			"Initialize devices collection failed: %w", err,
+		)
+		return fmt.Errorf(
+			"Initialize devices collection failed: %w",
+			err,
+		)
+	}
+
+	logger.Info(
+		"Device collection initialized successfully",
+		"database", cfg.MongoDatabase,
+		"collection", database.DeviceCollectionName,
+	)
+
+	// Prepare the User collection and authentication-related indexes.
+	userSetupContext, cancelUserSetup := context.WithTimeout(
+		context.Background(),
+		databaseSetupTimeout,
+	)
+
+	err = database.EnsureUserCollection(
+		userSetupContext,
+		mongoDB.Client,
+		cfg.MongoDatabase,
+	)
+
+	cancelUserSetup()
+
+	if err != nil {
+		logger.Error(
+			"Failed to initialize users collection",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize users collection: %w",
+			err,
+		)
+	}
+
+	logger.Info(
+		"User collection initialized successfully",
+		"database", cfg.MongoDatabase,
+		"collection", database.UserCollectionName,
+	)
+
+	userCollection := database.UserCollection(
+		mongoDB.Client,
+		cfg.MongoDatabase,
+	)
+
+	userRepository, err := repository.NewUserRepository(
+		userCollection,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize user repository",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize user repository: %w",
+			err,
+		)
+	}
+
+	passwordHasher, err := auth.NewPasswordHasher(
+		authConfig.BcryptCost,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize password hasher",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize password hasher: %w",
+			err,
+		)
+	}
+
+	accessTokenIssuer, err := auth.NewAccessTokenIssuer(
+		authConfig.JWTSecret,
+		authConfig.JWTIssuer,
+		authConfig.JWTAudience,
+		authConfig.JWTAccessTokenTTLMinutes,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize JWT access token issuer",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize JWT access token issuer: %w",
+			err,
+		)
+	}
+
+	authService, err := auth.NewService(
+		userRepository,
+		passwordHasher,
+		accessTokenIssuer,
+	)
+	if err != nil {
+		logger.Error(
+			"Failed to initialize authentication service",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"initialize authentication service: %w",
+			err,
+		)
+	}
+
+	logger.Debug(
+		"Authentication dependencies initialized successfully",
+	)
+
 	readinessCheck := func(ctx context.Context) error {
 		return database.CheckMongoDBReadiness(ctx, mongoDB.Client)
 	}
 
 	httpServer, err := server.NewHTTPServer(
-		cfg, httpServerConfig, healthProbeConfig, readinessCheck,
+		cfg, httpServerConfig, healthProbeConfig, readinessCheck, authService,
 	)
 
 	if err != nil {
