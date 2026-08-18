@@ -10,12 +10,14 @@ import (
 type Service struct {
 	userRepository user.Repository
 	passwordHasher PasswordHasher
+	tokenIssuer    AccessTokenIssuer
 }
 
 // NewService creates an authentication service.
 func NewService(
 	userRepository user.Repository,
 	passwordHasher PasswordHasher,
+	tokenIssuer AccessTokenIssuer,
 ) (*Service, error) {
 	if userRepository == nil {
 		return nil, fmt.Errorf(
@@ -29,8 +31,15 @@ func NewService(
 		)
 	}
 
+	if tokenIssuer == nil {
+		return nil, fmt.Errorf(
+			"access token issuer is required",
+		)
+	}
+
 	return &Service{
 		userRepository: userRepository,
 		passwordHasher: passwordHasher,
+		tokenIssuer:    tokenIssuer,
 	}, nil
 }

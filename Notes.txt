@@ -3,3 +3,12 @@ golines -w -m 120 .
 go test ./...
 go build -o bin\netpilot-api.exe .\cmd\api
 .\bin\netpilot-api.exe
+
+
+
+To generate access key for JWT:
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 32
+$rng.GetBytes($bytes)
+[Convert]::ToBase64String($bytes)
+$rng.Dispose()

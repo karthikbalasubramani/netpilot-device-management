@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
@@ -9,8 +10,19 @@ import (
 // PasswordHasher defines password hashing operations required by the
 // authentication service.
 type PasswordHasher interface {
-	Hash(password string) (string, error)
+	Hash(
+		password string,
+	) (string, error)
+
+	Verify(
+		passwordHash string,
+		password string,
+	) error
 }
+
+var ErrPasswordMismatch = errors.New(
+	"Password does not match",
+)
 
 // bcryptPasswordHasher implements PasswordHasher using bcrypt.
 type bcryptPasswordHasher struct {
@@ -51,4 +63,28 @@ func (hasher *bcryptPasswordHasher) Hash(
 	}
 
 	return string(hashedPassword), nil
+}
+
+// Verify compares a stored bcrypt hash against a plain-text password.
+func (hasher *bcryptPasswordHasher) Verify(
+	passwordHash string,
+	password string,
+) error {
+	err := bcrypt.CompareHashAndPassword(
+		[]byte(passwordHash),
+		[]byte(password),
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			bcrypt.ErrMismatchedHashAndPassword,
+		) {
+			return ErrPasswordMismatch
+		}
+		return fmt.Errorf(
+			"Verify password hash: %w",
+			err,
+		)
+	}
+	return nil
 }
