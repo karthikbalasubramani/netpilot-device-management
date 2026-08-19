@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/auth"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/middleware"
@@ -19,12 +20,13 @@ type ReadinessCheck func(ctx context.Context) error
 // Server holds the HTTP router, HTTP server, application configuration, and
 // health-probe dependencies.
 type Server struct {
-	config            *config.Config
-	healthProbeConfig config.HealthProbeConfig
-	checkReadiness    ReadinessCheck
-	authService       AuthService
-	router            *gin.Engine
-	httpServer        *http.Server
+	config              *config.Config
+	healthProbeConfig   config.HealthProbeConfig
+	checkReadiness      ReadinessCheck
+	authService         AuthService
+	router              *gin.Engine
+	httpServer          *http.Server
+	accessTokenVerifier auth.AccessTokenVerifier
 }
 
 // NewHTTPServer creates and configures the NetPilot HTTP server.
@@ -34,6 +36,7 @@ func NewHTTPServer(
 	healthProbeConfig config.HealthProbeConfig,
 	readinessCheck ReadinessCheck,
 	authService AuthService,
+	accessTokenVerifier auth.AccessTokenVerifier,
 ) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf(
@@ -44,6 +47,18 @@ func NewHTTPServer(
 	if readinessCheck == nil {
 		return nil, fmt.Errorf(
 			"readiness check function is required",
+		)
+	}
+
+	if authService == nil {
+		return nil, fmt.Errorf(
+			"authentication service is required",
+		)
+	}
+
+	if accessTokenVerifier == nil {
+		return nil, fmt.Errorf(
+			"access token verifier is required",
 		)
 	}
 
@@ -77,11 +92,12 @@ func NewHTTPServer(
 	registerErrorHandlers(router)
 
 	server := &Server{
-		config:            cfg,
-		healthProbeConfig: healthProbeConfig,
-		checkReadiness:    readinessCheck,
-		authService:       authService,
-		router:            router,
+		config:              cfg,
+		healthProbeConfig:   healthProbeConfig,
+		checkReadiness:      readinessCheck,
+		authService:         authService,
+		accessTokenVerifier: accessTokenVerifier,
+		router:              router,
 	}
 
 	server.registerRoutes()
