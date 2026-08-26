@@ -25,12 +25,11 @@ const (
 
 // Run initializes application dependencies and starts the NetPilot API server.
 func Run() error {
-	// Load .env values and application configuration.
 	cfg := config.Load()
 
-	// Initialize the terminal application logger before validating the
-	// configuration so validation failures can be logged.
-	logger.Init(cfg.LogLevel)
+	logger.Init(
+		cfg.LogLevel,
+	)
 
 	if err := cfg.ValidateEnvConfiguration(); err != nil {
 		logger.Error(
@@ -48,7 +47,6 @@ func Run() error {
 		"Configuration loaded from environment variables successfully",
 	)
 
-	// Initialize the dedicated API access file logger.
 	apiLogConfig, err := config.LoadAPILogConfig()
 	if err != nil {
 		logger.Error(
@@ -62,14 +60,16 @@ func Run() error {
 		)
 	}
 
-	if err := logger.InitAPILogger(logger.APILoggerConfig{
-		Enabled:    apiLogConfig.Enabled,
-		FilePath:   apiLogConfig.FilePath,
-		MaxSizeMB:  apiLogConfig.MaxSizeMB,
-		MaxBackups: apiLogConfig.MaxBackups,
-		MaxAgeDays: apiLogConfig.MaxAgeDays,
-		Compress:   apiLogConfig.Compress,
-	}); err != nil {
+	if err := logger.InitAPILogger(
+		logger.APILoggerConfig{
+			Enabled:    apiLogConfig.Enabled,
+			FilePath:   apiLogConfig.FilePath,
+			MaxSizeMB:  apiLogConfig.MaxSizeMB,
+			MaxBackups: apiLogConfig.MaxBackups,
+			MaxAgeDays: apiLogConfig.MaxAgeDays,
+			Compress:   apiLogConfig.Compress,
+		},
+	); err != nil {
 		logger.Error(
 			"Failed to initialize API file logger",
 			"error", err,
@@ -91,8 +91,6 @@ func Run() error {
 		}
 	}()
 
-	// Load and validate HTTP server configuration after godotenv has loaded
-	// values from .env.
 	httpServerConfig, err := config.LoadHTTPServerConfig()
 	if err != nil {
 		logger.Error(
@@ -122,12 +120,19 @@ func Run() error {
 		httpServerConfig.MaxRequestBodyBytes,
 	)
 
-	// Load health-probe configuration.
 	healthProbeConfig, err := config.LoadHealthProbeConfig()
 	if err != nil {
-		logger.Error("Failed to load health probe configuration", "error", err)
-		return fmt.Errorf("load health probe configuration: %w", err)
+		logger.Error(
+			"Failed to load health probe configuration",
+			"error", err,
+		)
+
+		return fmt.Errorf(
+			"load health probe configuration: %w",
+			err,
+		)
 	}
+
 	logger.Debug(
 		"Health probe configuration loaded",
 		"readiness_timeout",
@@ -166,8 +171,9 @@ func Run() error {
 		"port", cfg.AppPort,
 	)
 
-	// Establish the MongoDB connection during application startup.
-	mongoDB, err := database.ConnectMongoDB(cfg)
+	mongoDB, err := database.ConnectMongoDB(
+		cfg,
+	)
 	if err != nil {
 		logger.Error(
 			"Failed to connect to MongoDB",
@@ -180,9 +186,10 @@ func Run() error {
 		)
 	}
 
-	// Register MongoDB disconnection before starting the HTTP server.
 	defer func() {
-		if err := database.Disconnect(mongoDB); err != nil {
+		if err := database.Disconnect(
+			mongoDB,
+		); err != nil {
 			logger.Error(
 				"Failed to disconnect from MongoDB",
 				"error", err,
@@ -191,7 +198,9 @@ func Run() error {
 			return
 		}
 
-		logger.Info("MongoDB disconnected successfully")
+		logger.Info(
+			"MongoDB disconnected successfully",
+		)
 	}()
 
 	logger.Info(
@@ -199,26 +208,28 @@ func Run() error {
 		"database", cfg.MongoDatabase,
 	)
 
-	// Prepare prerequisits MongoDB collections
-	databaseSetupContext, cancelDatabaseSetup := context.WithTimeout(
-		context.Background(),
-		databaseSetupTimeout,
-	)
+	deviceSetupContext, cancelDeviceSetup :=
+		context.WithTimeout(
+			context.Background(),
+			databaseSetupTimeout,
+		)
 
 	err = database.EnsureDeviceCollection(
-		databaseSetupContext,
+		deviceSetupContext,
 		mongoDB.Client,
 		cfg.MongoDatabase,
 	)
 
-	cancelDatabaseSetup()
+	cancelDeviceSetup()
 
 	if err != nil {
 		logger.Error(
-			"Initialize devices collection failed: %w", err,
+			"Failed to initialize devices collection",
+			"error", err,
 		)
+
 		return fmt.Errorf(
-			"Initialize devices collection failed: %w",
+			"initialize devices collection: %w",
 			err,
 		)
 	}
@@ -229,11 +240,11 @@ func Run() error {
 		"collection", database.DeviceCollectionName,
 	)
 
-	// Prepare the User collection and authentication-related indexes.
-	userSetupContext, cancelUserSetup := context.WithTimeout(
-		context.Background(),
-		databaseSetupTimeout,
-	)
+	userSetupContext, cancelUserSetup :=
+		context.WithTimeout(
+			context.Background(),
+			databaseSetupTimeout,
+		)
 
 	err = database.EnsureUserCollection(
 		userSetupContext,
@@ -266,9 +277,10 @@ func Run() error {
 		cfg.MongoDatabase,
 	)
 
-	userRepository, err := repository.NewUserRepository(
-		userCollection,
-	)
+	userRepository, err :=
+		repository.NewUserRepository(
+			userCollection,
+		)
 	if err != nil {
 		logger.Error(
 			"Failed to initialize user repository",
@@ -296,20 +308,21 @@ func Run() error {
 		)
 	}
 
-	accessTokenIssuer, err := auth.NewAccessTokenIssuer(
-		authConfig.JWTSecret,
-		authConfig.JWTIssuer,
-		authConfig.JWTAudience,
-		authConfig.JWTAccessTokenTTLMinutes,
-	)
+	accessTokenManager, err :=
+		auth.NewAccessTokenManager(
+			authConfig.JWTSecret,
+			authConfig.JWTIssuer,
+			authConfig.JWTAudience,
+			authConfig.JWTAccessTokenTTLMinutes,
+		)
 	if err != nil {
 		logger.Error(
-			"Failed to initialize JWT access token issuer",
+			"Failed to initialize JWT access token manager",
 			"error", err,
 		)
 
 		return fmt.Errorf(
-			"initialize JWT access token issuer: %w",
+			"initialize JWT access token manager: %w",
 			err,
 		)
 	}
@@ -317,7 +330,7 @@ func Run() error {
 	authService, err := auth.NewService(
 		userRepository,
 		passwordHasher,
-		accessTokenIssuer,
+		accessTokenManager,
 	)
 	if err != nil {
 		logger.Error(
@@ -335,14 +348,23 @@ func Run() error {
 		"Authentication dependencies initialized successfully",
 	)
 
-	readinessCheck := func(ctx context.Context) error {
-		return database.CheckMongoDBReadiness(ctx, mongoDB.Client)
+	readinessCheck := func(
+		ctx context.Context,
+	) error {
+		return database.CheckMongoDBReadiness(
+			ctx,
+			mongoDB.Client,
+		)
 	}
 
 	httpServer, err := server.NewHTTPServer(
-		cfg, httpServerConfig, healthProbeConfig, readinessCheck, authService,
+		cfg,
+		httpServerConfig,
+		healthProbeConfig,
+		readinessCheck,
+		authService,
+		accessTokenManager,
 	)
-
 	if err != nil {
 		logger.Error(
 			"Failed to initialize HTTP server",
@@ -355,22 +377,35 @@ func Run() error {
 		)
 	}
 
-	serverErrorChannel := make(chan error, 1)
+	serverErrorChannel := make(
+		chan error,
+		1,
+	)
 
 	go func() {
 		if err := httpServer.StartHTTPServer(); err != nil &&
-			!errors.Is(err, http.ErrServerClosed) {
+			!errors.Is(
+				err,
+				http.ErrServerClosed,
+			) {
 			serverErrorChannel <- err
 		}
 	}()
 
-	interruptChannel := make(chan os.Signal, 1)
+	interruptChannel := make(
+		chan os.Signal,
+		1,
+	)
+
 	signal.Notify(
 		interruptChannel,
 		os.Interrupt,
 		syscall.SIGTERM,
 	)
-	defer signal.Stop(interruptChannel)
+
+	defer signal.Stop(
+		interruptChannel,
+	)
 
 	select {
 	case err := <-serverErrorChannel:
@@ -387,17 +422,21 @@ func Run() error {
 	case receivedSignal := <-interruptChannel:
 		logger.Info(
 			"Shutdown signal received",
-			"signal", receivedSignal.String(),
+			"signal",
+			receivedSignal.String(),
 		)
 
-		shutdownContext, cancel := context.WithTimeout(
-			context.Background(),
-			httpServerShutdownTimeout,
-		)
+		shutdownContext, cancel :=
+			context.WithTimeout(
+				context.Background(),
+				httpServerShutdownTimeout,
+			)
 
-		shutdownErr := httpServer.ShutdownHTTPServer(
-			shutdownContext,
-		)
+		shutdownErr :=
+			httpServer.ShutdownHTTPServer(
+				shutdownContext,
+			)
+
 		cancel()
 
 		if shutdownErr != nil {
@@ -412,7 +451,9 @@ func Run() error {
 			)
 		}
 
-		logger.Info("HTTP server shut down successfully")
+		logger.Info(
+			"HTTP server shut down successfully",
+		)
 
 		return nil
 	}
