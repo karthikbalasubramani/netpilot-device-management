@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/karthikbalasubramani/netpilot-device-management/internal/response"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/middleware"
 )
 
 // registerProtectedV1Routes registers API v1 routes that require a valid
@@ -25,12 +25,32 @@ func (server *Server) registerProtectedV1Routes(
 func (server *Server) verifyAuthentication(
 	ctx *gin.Context,
 ) {
-	response.SuccessResponse(
-		ctx,
+	authenticatedUser, ok := middleware.GetAuthenticatedUser(ctx)
+
+	if !ok {
+		ctx.JSON(
+			http.StatusInternalServerError,
+			gin.H{
+				"success":    false,
+				"message":    "Authenticated user context is unavailable",
+				"error_code": "AUTHENTICATION_CONTEXT_MISSING",
+				"request_id": ctx.GetString(
+					middleware.RequestIDKey,
+				),
+			},
+		)
+		return
+	}
+
+	ctx.JSON(
 		http.StatusOK,
-		"Authentication successful",
 		gin.H{
-			"status": "authenticated",
+			"success": true,
+			"message": "Access token is valid",
+			"data": gin.H{
+				"user_id": authenticatedUser.UserID,
+				"role":    authenticatedUser.Role,
+			},
 		},
 	)
 }

@@ -16,6 +16,7 @@ const (
 
 	authenticationRequiredMessage = "A valid access token is required"
 	authenticationRequiredCode    = "UNAUTHORIZED"
+	AuthenticatedUserKey          = "authenticated_user"
 )
 
 // Authentication validates the JWT access token supplied in the
@@ -41,9 +42,10 @@ func Authentication(
 
 			return
 		}
-		if _, err := tokenVerifier.Verify(
-			tokenString,
-		); err != nil {
+
+		claims, err := tokenVerifier.Verify(tokenString)
+
+		if err != nil {
 			logger.Warn(
 				"Access token validation failed",
 				"request_id", requestID,
@@ -57,8 +59,37 @@ func Authentication(
 
 			return
 		}
+		authenticatedUser := auth.AuthenticatedUser{
+			UserID:  claims.Subject,
+			Role:    claims.Role,
+			TokenID: claims.ID,
+		}
+
+		ctx.Set(
+			AuthenticatedUserKey,
+			authenticatedUser,
+		)
 		ctx.Next()
 	}
+}
+
+// GetAuthenticatedUser retrieves the verified authenticated-user identity
+// placed into Gin context by Authentication middleware.
+//
+// The boolean is false when the authentication context does not exist
+// or contains an unexpected type.
+func GetAuthenticatedUser(ctx *gin.Context) (auth.AuthenticatedUser, bool) {
+	value, exists := ctx.Get(AuthenticatedUserKey)
+	if !exists {
+		return auth.AuthenticatedUser{}, false
+	}
+
+	authenticatedUser, ok := value.(auth.AuthenticatedUser)
+	if !ok {
+		return auth.AuthenticatedUser{}, false
+	}
+
+	return authenticatedUser, true
 }
 
 func extractBearerToken(
