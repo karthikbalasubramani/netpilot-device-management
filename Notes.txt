@@ -1,14 +1,28 @@
+// Execution
 go fmt ./...
 golines -w -m 120 .
 go test ./...
 go build -o bin\netpilot-api.exe .\cmd\api
+$env:NETPILOT_BOOTSTRAP_ADMIN_NAME="NetPilot Admin"
+$env:NETPILOT_BOOTSTRAP_ADMIN_EMAIL="admin@netpilot.local"
+$env:NETPILOT_BOOTSTRAP_ADMIN_PASSWORD="AdminNetPilot@1234!"
+go run .\cmd\admin-bootstrap
+Remove-Item Env:NETPILOT_BOOTSTRAP_ADMIN_NAME
+Remove-Item Env:NETPILOT_BOOTSTRAP_ADMIN_EMAIL
+Remove-Item Env:NETPILOT_BOOTSTRAP_ADMIN_PASSWORD
 .\bin\netpilot-api.exe
 
 
-
-To generate access key for JWT:
+// To generate access key for JWT:
 $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 $bytes = New-Object byte[] 32
 $rng.GetBytes($bytes)
 [Convert]::ToBase64String($bytes)
 $rng.Dispose()
+
+
+// To Generate Admin Account
+$env:NETPILOT_BOOTSTRAP_ADMIN_NAME="NetPilot Admin"
+$env:NETPILOT_BOOTSTRAP_ADMIN_EMAIL="admin@netpilot.local"
+$env:NETPILOT_BOOTSTRAP_ADMIN_PASSWORD="AdminNetPilot@1234!"
+go run .\cmd\admin-bootstrap

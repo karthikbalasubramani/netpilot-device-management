@@ -231,3 +231,24 @@ func (repository *mongoUserRepository) UpdateLastLogin(
 	}
 	return nil
 }
+
+func (repository *mongoUserRepository) CountByRole(
+	ctx context.Context,
+	role user.Role,
+) (int64, error) {
+	count, err := repository.collection.CountDocuments(
+		ctx,
+		bson.M{
+			"role": role,
+		},
+	)
+
+	if err != nil {
+		return 0, fmt.Errorf(
+			"Count users by role: %w",
+			err,
+		)
+	}
+
+	return count, nil
+}
