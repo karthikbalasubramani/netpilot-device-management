@@ -40,4 +40,9 @@ type Repository interface {
 		userID string,
 		lastLoginAt time.Time,
 	) error
+
+	CountByRole(
+		ctx context.Context,
+		role Role,
+	) (int64, error)
 }
