@@ -252,3 +252,32 @@ func (repository *mongoUserRepository) CountByRole(
 
 	return count, nil
 }
+
+func (repository *mongoUserRepository) UpdateRole(
+	ctx context.Context, userID string, role user.Role, updateAt time.Time,
+) error {
+	result, err := repository.collection.UpdateOne(
+		ctx,
+		bson.M{
+			"user_id": userID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"role":       role,
+				"updated_at": updateAt,
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"Update role failed: %w",
+			err,
+		)
+	}
+
+	if result.MatchedCount == 0 {
+		return user.ErrNotFound
+	}
+
+	return nil
+}

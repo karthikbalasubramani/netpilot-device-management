@@ -11,6 +11,7 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/config"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/middleware"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/user"
 )
 
 // ReadinessCheck verifies whether the dependencies required by NetPilot are
@@ -37,6 +38,7 @@ func NewHTTPServer(
 	readinessCheck ReadinessCheck,
 	authService AuthService,
 	accessTokenVerifier auth.AccessTokenVerifier,
+	userService *user.Service,
 ) (*Server, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf(
@@ -100,7 +102,7 @@ func NewHTTPServer(
 		router:              router,
 	}
 
-	server.registerRoutes()
+	server.registerRoutes(userService)
 
 	server.httpServer = &http.Server{
 		Addr:              fmt.Sprintf(":%s", cfg.AppPort),

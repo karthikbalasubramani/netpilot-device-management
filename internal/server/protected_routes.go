@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/auth"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/middleware"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/user"
 )
@@ -12,6 +13,8 @@ import (
 // access token.
 func (server *Server) registerProtectedV1Routes(
 	protectedV1 *gin.RouterGroup,
+	tokenVerifier auth.AccessTokenVerifier,
+	userService *user.Service,
 ) {
 	protectedAuth := protectedV1.Group("/auth")
 
@@ -26,6 +29,21 @@ func (server *Server) registerProtectedV1Routes(
 			user.RoleAdmin,
 		),
 		verifyAdminAuthorization,
+	)
+
+	adminUsers := protectedV1.Group("/admin/users")
+
+	adminUsers.Use(
+		middleware.RequiredRoles(
+			user.RoleAdmin,
+		),
+	)
+
+	adminUsers.PATCH(
+		"/:user_id/role",
+		updateUserRoleHandler(
+			userService,
+		),
 	)
 }
 
