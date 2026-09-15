@@ -16,6 +16,7 @@ import (
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/logger"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/repository"
 	"github.com/karthikbalasubramani/netpilot-device-management/internal/server"
+	"github.com/karthikbalasubramani/netpilot-device-management/internal/user"
 )
 
 const (
@@ -292,7 +293,10 @@ func Run() error {
 			err,
 		)
 	}
-
+	userService :=
+		user.NewService(
+			userRepository,
+		)
 	passwordHasher, err := auth.NewPasswordHasher(
 		authConfig.BcryptCost,
 	)
@@ -364,6 +368,7 @@ func Run() error {
 		readinessCheck,
 		authService,
 		accessTokenManager,
+		userService,
 	)
 	if err != nil {
 		logger.Error(

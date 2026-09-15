@@ -45,4 +45,11 @@ type Repository interface {
 		ctx context.Context,
 		role Role,
 	) (int64, error)
+
+	UpdateRole(
+		ctx context.Context,
+		userID string,
+		role Role,
+		updatedAt time.Time,
+	) error
 }
